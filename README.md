@@ -1,2 +1,2 @@
 # ComputationalGenomics
-project for computational genomics
+Project for computational genomics
