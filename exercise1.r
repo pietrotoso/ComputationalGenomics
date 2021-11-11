@@ -1,4 +1,17 @@
 
+# Per  i geni che avevano più di una variante ho inserito nella tabella i conteggi
+# di ogni genotipo presente dato che il chisquare test non ha un numero di colonne fissato
+# come in questo caso
+#         G A REF ACA ACA A A
+# group1   3   2       0   0
+# group2   2  12       1   1
+# Un'alternativa più generale di cui avevo parlato con la prof potrebbe essre racchiudere in un'unica
+# categoria Aa tutte le varianti con alleli diversi di quel gene e in aa tutte le varianti con
+# alleli uguali, ma credo sarebbe meno informativa
+
+
+
+
 VARIANTanalysis<-function(filename){
   mydata<-read.delim(filename, row.names = 1)
   pvalues<-ptab(mydata)
