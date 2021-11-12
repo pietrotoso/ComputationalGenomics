@@ -14,8 +14,8 @@
 
 VARIANTanalysis<-function(filename){
   mydata<-read.delim(filename, row.names = 1)
-  pvalues<-ptab(mydata)
-  return(pvalues)}
+  MAT_results<-ptab(mydata)
+  return(MAT_results)}
   
 
 conti<-function(riga){
