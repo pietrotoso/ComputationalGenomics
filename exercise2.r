@@ -1,4 +1,7 @@
 Normalization<-function(file){
+  #normalizes data and plots MvAs and boxplots for both raw and normalized data
+  #input: filename containing original data
+  #output: normalized logaritmic data
   dati<-read.delim(file,row.names = 1)
   seq_depth<-depth(dati)
   log_counts<-logaritmici(dati)
@@ -10,6 +13,8 @@ Normalization<-function(file){
 }
 
 depth<-function(dati){
+  #input: raw count data
+  #output: vector sequencing depth of every sample
   seq_depth<-c()
   n_samples<-length(dati[1,])
   for (i in 1:n_samples){
@@ -19,6 +24,8 @@ depth<-function(dati){
 }
 
 logaritmici<-function(dati){
+  #input: raw count data
+  #output: logaritmic data
   n_samples<-length(dati[1,])
   for (i in 1:n_samples){
     dati[,i]<-dati[,i]+1
@@ -28,6 +35,9 @@ logaritmici<-function(dati){
 }
 
 plotMvA<-function(dati,filename){
+  #input: dati<-data of which I want MvAs plots
+  #       filename<-name of the pdf in which plots will be saved
+  # plots MvAs and boxplots
   n_samples<-length(dati[1,])
   first<-dati[,1]
   genes<-length(dati[,1])
@@ -47,6 +57,8 @@ plotMvA<-function(dati,filename){
 }
 
 scaling<-function(dati){
+  #input: raw count data
+  #output: normalized data
   n_samples<-length(dati[1,])
   first<-dati[,1]
   for (i in 2:n_samples){
