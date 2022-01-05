@@ -2,15 +2,43 @@ pvaledger<-function(filename){
   #input: file containing raw counts
   #output: matrix containing the pvalues for DE analysis of genes
   dati<-read.delim('raw_trascr_count.txt', row.names = 1)
-  groups<-rep(c('Group2','Group1','Control'),c(14,5,7))
+  dati<-dati[,1:19]
+  groups<-rep(c('Group2','Group1'),c(14,5))
   y<-DGEList(counts=dati,group=groups)
-  keep<-filterByExpr(y,group=c('Group1','Group2'))
+  keep<-filterByExpr(y)
   y<-y[keep, ,keep.lib.sizes=FALSE]
   y<-calcNormFactors(y)
   y<-estimateDisp(y)
   et<-exactTest(y,pair=c('Group1','Group2'))
   pvalues<-et$table$PValue
   names(pvalues)<-rownames(et$table)
+  return(pvalues)
+}
+edgernuovo<-function(filename){
+  #input: file containing raw counts
+  #output: matrix containing the pvalues for DE analysis of genes
+  dati<-read.delim('raw_trascr_count.txt', row.names = 1)
+  dati<-dati[,1:19]
+  group1<-grep("Group1",colnames(dati))
+  group2<-grep("Group2",colnames(dati))
+  subjects<-c()
+  subjects[group1]<-1
+  subjects[group2]<-2
+  Group<-factor(subjects)
+  design <- model.matrix(~0+Group) 
+  rownames(design)<-colnames(dati[,1:19]) 
+  y<-DGEList(dati)
+  keep<-filterByExpr(y,design)
+  y<-y[keep, ,keep.lib.sizes=FALSE]
+  y<-calcNormFactors(y)
+  y<-estimateDisp(y)
+  fit<-glmQLFit(y,design)
+  #fit<-glmFit(y,design)
+  contrasts <- makeContrasts(DE = Group1-Group2,levels=design)
+  #RES<-glmLRT(fit,contrast=contrasts[,"DE"])
+  RES<-glmQLFTest(fit,contrast=contrasts[,"DE"])
+  pvalues<-RES$table$PValue
+  names(pvalues)<-rownames(RES$table)
   return(pvalues)
 }
 
@@ -45,7 +73,7 @@ G0estimate<-function(pvalues){
   }
   plot(lambdas,G0s)
   #create a vector of possible G0s(from min value obtained to total number of genes)
-  stimeG0<-seq(min(G0s),length(pvalues),by=10)
+  stimeG0<-seq(round(min(G0s)),length(pvalues),by=10)
   somme<-c()
   #find the value of G0 that minimizes average quadratic error
   for (stima in stimeG0){
@@ -75,21 +103,21 @@ select_alfa_FDR<-function(pvalues,G0, FDR){
   indice<-0
   alfatest<-c()
   #determine the minimum distance between two pvalues
-  for ( i in 1:(length(ordinati)-1)){
-    alfatest<-append(alfatest,(ordinati[i+1]+ordinati[i])/2)
-  }
-  
-  #alternativa per alfa come distanza minima tra due pvalues, dà problemi
   #for ( i in 1:(length(ordinati)-1)){
-   # if (ordinati[i+1]-ordinati[i]<distanza){
-    #  distanza<-ordinati[i+1]-ordinati[i]
-     # indice<-i
-    #}
+  #  alfatest<-append(alfatest,(ordinati[i+1]+ordinati[i])/2)
   #}
+  
+  #alternativa per alfa come distanza minima tra due pvalues
+  for ( i in 1:(length(ordinati)-1)){
+    if (ordinati[i+1]-ordinati[i]<distanza){
+      distanza<-ordinati[i+1]-ordinati[i]
+      indice<-i
+    }
+  }
   #set epsilon as half the minimum distance
-  #epsilon<-distanza/2
+  epsilon<-distanza/2
   #create grid of pvalues
-  #alfatest<-ordinati+epsilon
+  alfatest<-ordinati+epsilon
   
   #find the alfa which gives the closest FDR to the one requested
   FDRlist<-c()
@@ -101,7 +129,7 @@ select_alfa_FDR<-function(pvalues,G0, FDR){
   diff<-FDRlist-FDR
   indice<-which(abs(diff)==min(abs(diff)))
   selectedalfa<-alfatest[indice]
-  return(selectedalfa)
+  return(c(selectedalfa,FDRlist[indice]))
 }
 
 selectgenes<-function(pvalues,alfa){
