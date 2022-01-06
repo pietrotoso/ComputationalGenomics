@@ -1,4 +1,7 @@
 pvaledger<-function(filename){
+  #Questo è un test più semplice di quelli della funzione dopo, è quello che avevo
+  #usato inizialmente, lo lascio qui, ma molto probabilmente è meglio edgernuovo
+  #
   #input: file containing raw counts
   #output: matrix containing the pvalues for DE analysis of genes
   dati<-read.delim('raw_trascr_count.txt', row.names = 1)
@@ -15,6 +18,11 @@ pvaledger<-function(filename){
   return(pvalues)
 }
 edgernuovo<-function(filename){
+  #A seconda delle righe che si commentano 43/44 e 46/47 si fa Quasi-likelihood
+  #generalized linear model o un normale generalized linear model
+  #Il primo dovrebbe essere preciso e dà un grafico migliore, ma seleziona solo 7 geni
+  #Il secondo ha un grafico peggiore, ma seleziona più geni
+  #
   #input: file containing raw counts
   #output: matrix containing the pvalues for DE analysis of genes
   dati<-read.delim('raw_trascr_count.txt', row.names = 1)
@@ -31,7 +39,7 @@ edgernuovo<-function(filename){
   keep<-filterByExpr(y,design)
   y<-y[keep, ,keep.lib.sizes=FALSE]
   y<-calcNormFactors(y)
-  y<-estimateDisp(y)
+  y<-estimateDisp(y,design)
   fit<-glmQLFit(y,design)
   #fit<-glmFit(y,design)
   contrasts <- makeContrasts(DE = Group1-Group2,levels=design)
@@ -59,12 +67,16 @@ stime<-function(alfa,pvalues,G0){
   return(valori)
 }
 
-G0estimate<-function(pvalues){
-  #input: vector containing pvalues of the genes
+G0estimate<-function(pvalues, start=0.02,end=0.9){
+  #input: pvalues<-vector containing pvalues of the genes
+  #       start<-dove cominciare la ricerca dela retta di stima
+  #       end<-dove finire la ricerca della retta di stima
+  #start e end sono utili, una volta visto il grafico di G0 e decisa la zona in cui si
+  #stabilizza, per trovare il valore di stima di G0
   #output: estimated value of G0
   totgenes<-length(pvalues)
   #setting the lambda grid
-  lambdas<-seq(0.02,0.9,by=0.01)
+  lambdas<-seq(start,end,by=0.01)
   G0s<-c()
   for (i in lambdas){
     selected<-length(pvalues[pvalues<=i])
