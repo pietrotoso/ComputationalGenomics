@@ -67,7 +67,7 @@ stime<-function(alfa,pvalues,G0){
   return(valori)
 }
 
-G0estimate<-function(pvalues, start=0.02,end=0.9){
+G0estimate<-function(pvalues, start=0.02,end=0.99){
   #input: pvalues<-vector containing pvalues of the genes
   #       start<-dove cominciare la ricerca dela retta di stima
   #       end<-dove finire la ricerca della retta di stima
@@ -81,9 +81,9 @@ G0estimate<-function(pvalues, start=0.02,end=0.9){
   for (i in lambdas){
     selected<-length(pvalues[pvalues<=i])
     predict<-(totgenes-selected)/(1-i)
-    G0s<-append(G0s,min(predict,totgenes))
+    G0s<-append(G0s,predict)
   }
-  plot(lambdas,G0s)
+  plot(lambdas,G0s,ylim=c(15000,17000))
   #create a vector of possible G0s(from min value obtained to total number of genes)
   stimeG0<-seq(round(min(G0s)),length(pvalues),by=10)
   somme<-c()
