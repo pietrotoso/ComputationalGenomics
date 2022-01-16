@@ -85,7 +85,7 @@ G0estimate<-function(pvalues, start=0.02,end=0.99){
   }
   plot(lambdas,G0s,ylim=c(15000,17000))
   #create a vector of possible G0s(from min value obtained to total number of genes)
-  stimeG0<-seq(round(min(G0s)),length(pvalues),by=10)
+  stimeG0<-seq(round(min(G0s)),length(pvalues))
   somme<-c()
   #find the value of G0 that minimizes average quadratic error
   for (stima in stimeG0){
@@ -112,23 +112,16 @@ select_alfa_FDR<-function(pvalues,G0, FDR){
   ordinati<-sort(pvalues)
   ordinati<-unique(ordinati)
   distanza<-1
-  indice<-0
-  alfatest<-c()
   #determine the minimum distance between two pvalues
-  #for ( i in 1:(length(ordinati)-1)){
-  #  alfatest<-append(alfatest,(ordinati[i+1]+ordinati[i])/2)
-  #}
-  
-  #alternativa per alfa come distanza minima tra due pvalues
   for ( i in 1:(length(ordinati)-1)){
     if (ordinati[i+1]-ordinati[i]<distanza){
       distanza<-ordinati[i+1]-ordinati[i]
-      indice<-i
     }
   }
   #set epsilon as half the minimum distance
   epsilon<-distanza/2
   #create grid of pvalues
+  alfatest<-c()
   alfatest<-ordinati+epsilon
   
   #find the alfa which gives the closest FDR to the one requested

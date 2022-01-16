@@ -1,0 +1,64 @@
+---
+title: "Exercise 1"
+author: "Group C"
+date: "16/1/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+ 
+## Prepare the data
+
+```{r}
+source('exercise1.r')
+```
+
+
+First of all we load the genetic data about snp variants
+```{r}
+mydata<-read.delim('GeneticData.txt', row.names = 1)
+```
+
+We initialize the vector valori, in which we will store the pvalues of the chi-square test, and the vector indici, in which we will store the indices of chromosome positions for which subjects have all the same variant, since for these the chi-square is not informative
+```{r}
+indici<-c()
+valori<-c()
+```
+
+Then we apply the chi-square test to all the chromosome locations, after having created the corresponding contingency matrix.
+To do this we use the funnction we created tabellariga(num,dati) that given in input the number of the line and the dataframe, gives in output the contingency matrix, as we can see in the following example
+```{r}
+tabellariga(1,mydata)
+```
+The column REF represents the number of counts for the reference, the other column the number of counts for the specific variant.
+It can happen that the same snp has different variants, in this case we will have the number of counts of each variant, like in this example
+```{r}
+tabellariga(18,mydata)
+```
+# Apply chi-square test
+
+Now that we have the contincey matrices, we can apply the chi-aquare test and extract the p-value
+```{r}
+lung<-length(mydata[,1])
+for (i in (1:lung)){
+  pvalue<-as.double(chisq.test(tabellariga(i,mydata),simulate.p.value = TRUE)[3])
+  valori<-append(valori,pvalue)
+  if (length(tabellariga(i,mydata)[1,])==1) {
+    indici<-append(indici,i)
+  }
+}
+```
+
+We construct a list with chromosome locations and corresponding p-values, we set to 1 the value of pvalues of the genes corresponding to the indices in indici and we visualize the first rows
+```{r}
+pvalues<-matrix(valori)
+colnames(pvalues)<-'p-value'
+rownames(pvalues)<-rownames(mydata)
+#setting to 1 the p-value for the genes corresponding to the indici vector, since
+#these genes are not informative(all genotypes are equal)
+pvalues[indici,1]<-1
+head(pvalues,15)
+```
+
