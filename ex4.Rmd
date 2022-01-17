@@ -1,0 +1,183 @@
+---
+title: "Exercise 4"
+author: "Group C"
+date: "17/1/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+# Preparing the data
+```{r, message=FALSE}
+source('exercise4_da_sistemare.R')
+library(org.Hs.eg.db)#Homo sapiens database call
+library(GO.db)
+```
+
+We load the 'dati4.r' file containing selzionati, a vector with the names of genes selected as DE in exercise 3, and totali, a vector with the names of all genes remained after filtering in exercise 3
+```{r}
+load('dati4.r')
+```
+
+We select from the Homo sapiens database the information relative to our genes of interest
+```{r, message=FALSE}
+#selection of information relative to our genes
+gene_GO<-select(org.Hs.eg.db,keys=totali,columns=c('ENTREZID','GOALL'),keytype='SYMBOL')
+#eliminate evidenceall column
+gene_GO<-gene_GO[,-4]
+#select lines that are repeated
+doppi<-duplicated(gene_GO[,2:3])
+#eliminate repeated lines
+gene_GO<-gene_GO[doppi==FALSE,]
+```
+We obtain a dataframe and here we visualize the first rows
+```{r}
+head(gene_GO)
+```
+
+We add a column to keep track if the gene belongs to the selected ones and we eliminate rows containing NAs
+```{r, message=FALSE}
+#add a column to track if a gene is part of the selected
+SELECTED<-""
+gene_GO<-cbind(gene_GO,SELECTED)
+gene_GO$SELECTED<-gene_GO$SYMBOL%in%selezionati
+#eliminate NAs
+gene_GO_NA<-na.omit(gene_GO)
+head(gene_GO_NA)
+```
+
+We now split the dataframe in 3 different dataframes based on the ONTOLOGYALL denomination, we will run separate analysis for Molecular Function, Cellular Component and Biological Process
+```{r}
+matriceMF<-gene_GO_NA[gene_GO_NA$ONTOLOGYALL=='MF',]
+matriceCC<-gene_GO_NA[gene_GO_NA$ONTOLOGYALL=='CC',]
+matriceBP<-gene_GO_NA[gene_GO_NA$ONTOLOGYALL=='BP',]
+```
+
+
+# Enrichement Analysis
+
+## Molecular Function
+
+We now do the step by step analysis for one of the three ontology classes (Molecular Function), for the other ones we will use functions we built and show the results.
+
+Firstly we create a matrix containing, for each unique GO,the total number of occurrences and the number of occurrences in correspondence to the selected genes.
+
+We select the unique GOs
+```{r}
+GO_present<-duplicated(matriceMF$GOALL)
+GO<-matriceMF$GOALL[GO_present==FALSE]
+```
+
+And we create the matrix of counts applying the function 'assigned' to each GO.
+The function 'assigned' counts the occurrences we want to know by looking in the dataframe
+```{r}
+count<-sapply(GO,assigned,matriceMF$GOALL,matriceMF$SELECTED)
+count<-t(count)
+colnames(count)<-c("N_GENES","N_SELECTED")
+```
+
+We then remove the GOs for which we have just 1 total count and the ones for which we don't have any selected gene occurrence
+```{r}
+index_one<-which(count[,1]==1)
+FINAL<-count[-index_one,]
+FINAL<-FINAL[-which(FINAL[,2]<1),]
+```
+
+And we visualize the first rows of the matrix we obtained
+```{r}
+head(FINAL)
+```
+Now that we have our counts, we prepare for each G0 term the matrix that we need as input for the fisher exact test.
+
+We count the number of genes remained in our dataframe after the GO selection and the number of selected genes remained.
+```{r}
+gene_GO_NA<-matriceMF[matriceMF$GOALL%in%rownames(FINAL),]
+gene_tot<-duplicated(matriceMF$SYMBOL)
+ind_gene<-which(gene_tot==FALSE)
+tot_genes<-length(ind_gene)
+tot_selected<-length(which(matriceMF$SELECTED[ind_gene]==TRUE))
+```
+
+Then we create the input matrix in the following way for each GO remained, we see an example for the first one
+```{r}
+tot_ac<-FINAL[1,1]
+a<- FINAL[1,2]
+c<- tot_ac-a
+b<- tot_selected-a
+d<- tot_genes-c-tot_selected 
+#create matrix
+mat<-matrix(c(a,c,b,d),2,2)
+rownames(mat)<-c('Selected','Non Selected')
+colnames(mat)<-c('GO','not GO')
+print(mat)
+```
+We apply to each GO remained the function we built 'fisher_test' that creates the input matrix and then applies the fisher exact test and extracts the pvalue.
+We obtain a list with the GOs and corresponding pvalues, we visualize the first elements.
+```{r}
+p_value<-apply(FINAL,1,fisher_test,tot_selected,tot_genes)
+head(p_value)
+```
+We now have to select the enriched GOs. To to this we decided to find a confidence level alpha for which the FDR is 0.05 and we select all the GOs with p_value less or equal than alpha.
+
+We apply the same procedure we used in exercise 3, so first of all we estimate the value of G0.
+
+```{r}
+prima<-G0estimate(p_value,ylim1 = 100,ylim2=400, disegna=FALSE)
+```
+
+
+And we focus on the portion of graph where the estimate gets stable between 0.4 and 0.6
+```{r}
+stima<-G0estimate(p_value,0.4,0.6,100,400)
+```
+
+
+
+Then we select the alpha that gives the FDR closest to 0.05
+```{r}
+coppia<-select_alfa_FDR(p_value,stima,0.05)
+names(coppia)<-c('alpha','FDR')
+print(coppia)
+alfa<-coppia[1]
+```
+And we select the G0s with pvalue smaller o equal than alpha
+```{r}
+enrichedMF<-selectgenes(p_value,alfa)
+```
+
+
+We then associate to every GO the corresponding GO term coming from the GO.db database
+```{r, message=FALSE}
+descriptionMF<-select(GO.db,keys=enrichedMF,columns='TERM',keytype='GOID')
+```
+We obtain a final matrix containing the enriched GOs and the corresponding GO terms, of which we visualize the first rows
+```{r}
+head(descriptionMF)
+```
+We now repeat the analysis for the other two terms.
+
+## Biological Process
+
+For 'Biological Process' we obtain the following.(These are just the first rows)
+```{r, message=FALSE, fig.show='hide'}
+pvaluesBP<-pvfisher(matriceBP)
+enrichedBP<-enrichedGO(pvaluesBP,0.7,0.9,500,3000)
+descriptionBP<-select(GO.db,keys=enrichedBP,columns='TERM',keytype='GOID')
+head(descriptionBP)
+```
+
+## Cellular Component
+
+For 'Cellular Component' we obtain the following.(These are just the first rows)
+```{r, message=FALSE,fig.show='hide'}
+pvaluesCC<-pvfisher(matriceCC)
+enrichedCC<-enrichedGO(pvaluesCC,0.4,0.6,100,400)
+descriptionCC<-select(GO.db,keys=enrichedCC,columns='TERM',keytype='GOID')
+head(descriptionCC)
+```
+
+
+
+
+

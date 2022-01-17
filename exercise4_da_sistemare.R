@@ -11,7 +11,7 @@ call_db<-function(selezionati,nomitotali){
   #eliminate evidenceall column
   gene_GO<-gene_GO[,-4]
   #select lines that are repeated
-  doppi<-duplicated(gene_GO[2:3])
+  doppi<-duplicated(gene_GO[,2:3])
   #eliminate repeated lines
   gene_GO<-gene_GO[doppi==FALSE,]
   
@@ -48,6 +48,8 @@ best<-function(gene_GO_NA){
   count<-sapply(GO,assigned,gene_GO_NA$GOALL,gene_GO_NA$SELECTED)
   count<-t(count)
   colnames(count)<-c("N_GENES","N_SELECTED")
+  
+  
   
   #remove GOs that have just one count
   index_one<-which(count[,1]==1)
@@ -112,33 +114,114 @@ pvfisher<-function(go_mat){
   p_value<-apply(FINAL_GO,1,fisher_test,tot_selected,tot_genes)
   return(p_value)
 }
-enrichedGO<-function(Gopvalues){
+G0estimate<-function(pvalues, start=0.02,end=0.99,ylim1=100,ylim2=500, disegna=TRUE){
+  #input: pvalues<-vector containing pvalues of the genes
+  #       start<-dove cominciare la ricerca dela retta di stima
+  #       end<-dove finire la ricerca della retta di stima
+  #start e end sono utili, una volta visto il grafico di G0 e decisa la zona in cui si
+  #stabilizza, per trovare il valore di stima di G0
+  #output: estimated value of G0
+  totgenes<-length(pvalues)
+  #setting the lambda grid
+  lambdas<-seq(start,end,by=0.01)
+  G0s<-c()
+  for (i in lambdas){
+    selected<-length(pvalues[pvalues<=i])
+    predict<-(totgenes-selected)/(1-i)
+    G0s<-append(G0s,predict)
+  }
+  plot(lambdas,G0s,ylim=c(ylim1,ylim2))
+  #create a vector of possible G0s(from min value obtained to total number of genes)
+  stimeG0<-seq(round(min(G0s)),length(pvalues))
+  somme<-c()
+  #find the value of G0 that minimizes average quadratic error
+  for (stima in stimeG0){
+    somma<-0
+    for (i in G0s){
+      somma<-somma+(stima-i)^2
+    }
+    somma<-somma/length(G0s)
+    somme<-append(somme,somma)
+  }
+  indice<-which(somme==min(somme))
+  valore<-stimeG0[indice]
+  #plotting on the graph the line corresponding to our estimate
+  if (disegna==TRUE){
+    linea<-rep(valore,length(lambdas))
+    lines(lambdas,linea)
+  }
+  return(stimeG0[indice])
+}
+select_alfa_FDR<-function(pvalues,G0, FDR){
+  #input: pvalues<-vector containing pvalues of genes
+  #       G0<-the value of G0 which we're considering(our estimate)
+  #       FDR<-FDR that we want to have
+  #output: alfa selected that gives the closest FDR to the one we want
+  ordinati<-sort(pvalues)
+  ordinati<-unique(ordinati)
+  distanza<-1
+  #determine the minimum distance between two pvalues
+  for ( i in 1:(length(ordinati)-1)){
+    if (ordinati[i+1]-ordinati[i]<distanza){
+      distanza<-ordinati[i+1]-ordinati[i]
+    }
+  }
+  #set epsilon as half the minimum distance
+  epsilon<-distanza/2
+  #create grid of pvalues
+  alfatest<-c()
+  alfatest<-ordinati+epsilon
+  
+  #find the alfa which gives the closest FDR to the one requested
+  FDRlist<-c()
+  for (alfa in alfatest){
+    selected<-length(pvalues[pvalues<=alfa])
+    expFP<-G0*alfa#round?
+    FDRlist<-append(FDRlist,expFP/selected)
+  }
+  diff<-FDRlist-FDR
+  indice<-which(abs(diff)==min(abs(diff)))
+  selectedalfa<-alfatest[indice]
+  return(c(selectedalfa,FDRlist[indice]))
+}
+selectgenes<-function(pvalues,alfa){
+  selezionati<-pvalues[pvalues<=alfa]
+  selezionati<-names(selezionati)
+  return(selezionati)
+}
+enrichedGO<-function(pvalues,start,end,y1,y2){
   #funzione che dovrà selezionare i GO enriched, da scrivere quando si decide come selezionare
-  return(Gopvalues[Gopvalues<0.0005])
+  par(mfrow=c(1,2))
+  prima<-G0estimate(pvalues,ylim1 = y1,ylim2=y2, disegna=FALSE)
+  stima<-G0estimate(pvalues,start,end,y1,y2)
+  alfa<-select_alfa_FDR(pvalues,stima,0.05)[1]
+  selezionati<-selectgenes(pvalues,alfa)
+  return(selezionati)
 }
 ####################################################################
 
 #Main #
-
-library(org.Hs.eg.db)#Homo sapiens database call
-library(GO.db)
-
-#Creation of GO database matrix
-go_mat<-call_db(selected,totali)
-#creation of matrices for different ontology classes
-matriceMF<-go_mat[go_mat$ONTOLOGYALL=='MF',]
-matriceCC<-go_mat[go_mat$ONTOLOGYALL=='CC',]
-matriceBP<-go_mat[go_mat$ONTOLOGYALL=='BP',]
-#computation of the pvalues
-pvaluesMF<-pvfisher(matriceMF)
-pvaluesCC<-pvfisher(matriceCC)
-pvaluesBP<-pvfisher(matriceBP)
-#extraction of enriched GOs
-enrichedMF<-enrichedGO(pvaluesMF)
-enrichedCC<-enrichedGO(pvaluesCC)
-enrichedBP<-enrichedGO(pvaluesBP)
-#extraction of the corresponding GO term
-descriptionMF<-select(GO.db,keys=names(enrichedMF),columns='TERM',keytype='GOID')
-descriptionCC<-select(GO.db,keys=names(enrichedCC),columns='TERM',keytype='GOID')
-descriptionBP<-select(GO.db,keys=names(enrichedBP),columns='TERM',keytype='GOID')
+main<-function(selected,totali){
+  library(org.Hs.eg.db)#Homo sapiens database call
+  library(GO.db)
+  
+  #Creation of GO database matrix
+  go_mat<-call_db(selected,totali)
+  #creation of matrices for different ontology classes
+  matriceMF<-go_mat[go_mat$ONTOLOGYALL=='MF',]
+  matriceCC<-go_mat[go_mat$ONTOLOGYALL=='CC',]
+  matriceBP<-go_mat[go_mat$ONTOLOGYALL=='BP',]
+  #computation of the pvalues
+  pvaluesMF<-pvfisher(matriceMF)
+  pvaluesCC<-pvfisher(matriceCC)
+  pvaluesBP<-pvfisher(matriceBP)
+  #extraction of enriched GOs
+  enrichedMF<-enrichedGO(pvaluesMF)
+  enrichedCC<-enrichedGO(pvaluesCC,0.4,0.6,100,400)
+  enrichedBP<-enrichedGO(pvaluesBP, 0.4,0.6,100,400)
+  #extraction of the corresponding GO term
+  descriptionMF<-select(GO.db,keys=names(enrichedMF),columns='TERM',keytype='GOID')
+  descriptionCC<-select(GO.db,keys=names(enrichedCC),columns='TERM',keytype='GOID')
+  descriptionBP<-select(GO.db,keys=names(enrichedBP),columns='TERM',keytype='GOID')
+}
 
