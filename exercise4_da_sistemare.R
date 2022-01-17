@@ -23,6 +23,16 @@ call_db<-function(selezionati,nomitotali){
   gene_GO_NA<-na.omit(gene_GO)
   return(gene_GO_NA)
 }
+
+#function that assign the total num of genes and selected genes to each GO term
+assigned<-function(value,go,sel)
+{
+  index<-which(go==value)
+  num_go<-length(index)
+  num_sel<-length(which(sel[index]==TRUE))
+  mat<-rbind(num_go,num_sel)
+  return(mat)
+}
 #Elimination of single gene-GO terms and creation of unique GO term list
 best<-function(gene_GO_NA){
   #input: matrix with genes and relative GOs with a column that tells if the gene is
@@ -104,7 +114,7 @@ pvfisher<-function(go_mat){
 }
 enrichedGO<-function(Gopvalues){
   #funzione che dovrà selezionare i GO enriched, da scrivere quando si decide come selezionare
-  return(Gopvalues[Gopvalues<0.3])
+  return(Gopvalues[Gopvalues<0.0005])
 }
 ####################################################################
 
