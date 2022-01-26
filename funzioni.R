@@ -30,7 +30,7 @@ pvcorr<-function(dati){
   }
   relazioni<-cbind(relazioni,segni)
   rownames(relazioni)<-1:M
-  colnames(relazioni)<-c('gene1','gene2','sign')
+  colnames(relazioni)<-c('cluster1','cluster2','sign')
   
   
   return(relazioni)
