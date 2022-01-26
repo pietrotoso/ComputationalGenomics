@@ -1,42 +1,39 @@
-# pvcorr<-function(dati){
-#   correlazioni<-cor(t(dati))#genes on the rows
-#   valorinulli<-nullcorr(dati,4)
-#   soglie<-head(sort(abs(valorinulli),decreasing=TRUE),200)
-#   fdrlist<-c()
-#   vettorecorr<-as.vector(correlazioni)
-#   vettorecorr<-vettorecorr[!(vettorecorr==1)]
-#   totali<-length(valorinulli)
-#   totcorr<-length(vettorecorr)
-#   for ( i in soglie){
-#     selezionati<-length(vettorecorr[abs(vettorecorr)>=i])
-#     expfp<-(length(valorinulli[abs(valorinulli)>=i])/totali)*totcorr
-#     FDR<-expfp/selezionati
-#     fdrlist<-append(fdrlist,FDR)
-#   }
-#   massimo<-max(abs(valorinulli))
-#   boole<-abs(correlazioni)>massimo
-#   relazioni<-which(boole==TRUE,arr.ind = TRUE)
-#   relazioni<-as.data.frame(relazioni)
-#   relazioni<-relazioni[!(relazioni[,1]==relazioni[,2]),]
-#   M=dim(relazioni)[1]
-#   segni<-c()
-#   for (i in 1:M){
-#     segni<-append(segni,sign(correlazioni[relazioni[i,1],relazioni[i,2]]))
-#   }
-#   for (j in (1 :length(segni))){
-#     if (segni[j]==1){
-#       segni[j]<-'+'
-#     }
-#     else {
-#       segni[j]<-'-'
-#     }
-#   }
-#   relazioni<-cbind(relazioni,segni)
-#   rownames(relazioni)<-1:M
-#   colnames(relazioni)<-c('gene1','gene2','sign')
-#   
-#   
-#   return(relazioni)
+pvcorr<-function(dati){
+  correlazioni<-cor(t(dati))#genes on the rows
+  valorinulli<-nullcorr(dati,4)
+  soglie<-sort(abs(valorinulli),decreasing=TRUE)[1000:1050]
+  fdrlist<-c()
+  vettorecorr<-as.vector(correlazioni)
+  vettorecorr<-vettorecorr[!(vettorecorr==1)]
+  totali<-length(valorinulli)
+  totcorr<-length(vettorecorr)
+  soglia<-0.78
+  selezionati<-length(vettorecorr[abs(vettorecorr)>=soglia])
+  expFP<-(length(valorinulli[abs(valorinulli)>=soglia])/totali)*totcorr
+  FDR<-expFP/selezionati
+  boole<-abs(correlazioni)>=soglia
+  relazioni<-which(boole==TRUE,arr.ind = TRUE)
+  relazioni<-as.data.frame(relazioni)
+  relazioni<-relazioni[!(relazioni[,1]==relazioni[,2]),]
+  M=dim(relazioni)[1]
+  segni<-c()
+  for (i in 1:M){
+    segni<-append(segni,sign(correlazioni[relazioni[i,1],relazioni[i,2]]))
+  }
+  for (j in (1 :length(segni))){
+    if (segni[j]==1){
+      segni[j]<-'+'
+    }
+    else {
+      segni[j]<-'-'
+    }
+  }
+  relazioni<-cbind(relazioni,segni)
+  rownames(relazioni)<-1:M
+  colnames(relazioni)<-c('gene1','gene2','sign')
+  
+  
+  return(relazioni)
 }
 nullcorr<-function(dati,k){
   valori<-c()
@@ -78,7 +75,7 @@ coeffvariation<-function(data){
 }
 
 filtraescala<-function(data,coeff){
-  filtrati<-divisi[coeff>0.3]
+  filtrati<-data[coeff>0.3,]
   trasp<-t(filtrati)
   trasp<-scale(trasp)
   filtratiscalati<-t(trasp)
