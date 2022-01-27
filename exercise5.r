@@ -215,3 +215,17 @@ nullcorr<-function(dati,k){
   valori<-valori[!(valori==1)]
   return(valori)
 }
+
+entropia<-function(dati){
+  N=dim(dati)[1]
+  dati<-t(dati)
+  dati<-discretize(dati,nbins=7,disc='equalwidth')
+  names_df <- colnames(dati)
+  values_df <- rep(0, N)
+  entropy_df <- data.frame(entropia = values_df, row.names = names_df)
+  for (i in (1:N)){
+    row_curr <- dati[,i]
+    entropy_df[i,] <- entropy(row_curr)
+  }
+  return(entropy_df)
+}
