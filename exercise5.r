@@ -294,8 +294,8 @@ scalamutua<-function(mutua,entropia){
 intersezione<-function(subset1,subset2){
   subset1<-subset1[c(1,2),]
   subset2<-subset2[c(1,2),]
-  rownames(subset1)<-c('from','to')
-  rownames(subset2)<-c('from','to')
+  rownames(subset1)<-c('cluster1','cluster2')
+  rownames(subset2)<-c('cluster1','cluster2')
   intersez<-intersect(subset1,subset2)
   return(intersez)
 }
