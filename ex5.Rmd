@@ -1,0 +1,645 @@
+---
+title: "Exercise 5"
+author: "Group C"
+date: "26/1/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# Transcriptional Regulations
+
+For the first part we focus on trascriptional data. The idea is to try to find relations between genes regarding their transcription. We will implement some of the method we've seen in class.
+
+## Data preparation
+```{r, message=FALSE}
+library(infotheo)
+library(ppcor)
+set.seed(50)
+source('exercise5.r')
+```
+
+```{r, include=FALSE}
+load('mutdata.r')
+load('partialall.r')
+load('Relazioni.r')
+load('datieser5.r')
+```
+
+We keep the genes of which we have the length(17907 of 17934) and we divide the transcription values of each gene by the gene length in order to eliminate the effect of the gene length.
+```{r,eval=FALSE}
+load('dati3')
+lunghezze<-read.delim('raw_trascr_count_annot.txt')
+#get length
+lunghezze<-lunghezze[,c('Symbol','Length')]
+#keep genes for which we have the length
+nomitr<-rownames(normali)
+lunghezze<-lunghezze[lunghezze$Symbol%in%nomitr,]
+lunghezze<-as.data.frame(lunghezze)
+tenuti<-normali[lunghezze$Symbol,]
+#divide by length
+for (i in 1:length(tenuti[,1])){
+  tenuti[i,]<-tenuti[i,]/
+    (lunghezze[lunghezze$Symbol==rownames(tenuti)[i],])$Length
+}
+```
+
+We now eliminate the 'flat' genes. To do so we calculate the coefficient of variation CV = (standard deviation) / (mean) and we keep the genes with CV > 0.3.
+We end up with 10898 genes.
+```{r,eval=FALSE}
+deviazioni<-apply(tenuti,FUN=sd,1)
+medie<-apply(tenuti,FUN=mean,1)
+coeff<-deviazioni/medie
+filtrati<-tenuti[coeff>0.3,]
+```
+
+We now scale the genes in order to make them comparable so that we can cluster them according to euclidean distance.
+```{r,eval=FALSE}
+trasp<-t(filtrati)
+trasp<-scale(trasp)
+scalati<-t(trasp)
+```
+
+Visualize first rows of the obtained dataframe
+```{r}
+print(scalati[1:3,])
+```
+
+
+## Clustering
+
+We do our analysis using all the subjects available in order to have as many instances of each gene as possible.
+All our models will be 'instantaneous' since our samples correspond to different subjects, not different time samples.
+
+First of all we cluster our data for two main reasons:
+1) Cluster that are very similar won't be distinguishable in terms of relations with other genes
+2) We need to reduce the dimensionality of our data in order to be able to do the analysis in terms of computational cost.
+
+The number of clusters we decide to identify is 4000. We saw that above this number the computational time becomes too big for our computers. Still the last clusters joined are fairly similar.
+
+We use hierarchical clustering with average distance.
+```{r,eval=FALSE}
+# computing distance matrix
+dist_matrix <- dist(scalati, method = 'euclidean')
+# average linkage is used to update distance matrix
+hierarchical <- hclust(dist_matrix, method = 'average')
+#we keep 4000 cluster
+groups<-cutree(hierarchical,4000)
+gruppi<-list()
+for(i in 1:4000){
+  gruppi<-append(gruppi,list(names(groups[groups==i])))
+}
+```
+
+The variable gruppi will allow us the recover the genes belonging to each cluster starting from the cluster number.
+Let's visualize some of the clusters.
+```{r}
+print(gruppi[1:3])
+```
+
+We now create the final dataframe with clusters on rows, subjects on columns and for each cluster the mean of the values of the genes belonging to the cluster.
+```{r,eval=FALSE}
+tabella<-matrix(rep(0,104000),nrow=4000)
+for (i in 1:4000){
+  if (length(gruppi[[i]])==1){
+    tabella[i,]<-scalati[gruppi[[i]],]
+  }
+  else{
+    tabella[i,]<-colMeans(scalati[gruppi[[i]],])
+  }
+}
+allsubjects<-tabella
+colnames(allsubjects)<-colnames(scalati)
+rownames(allsubjects)<-1:4000
+```
+
+Let's visualize first rows of the clusters dataframe.
+```{r}
+print(allsubjects[1:3,])
+```
+
+## Partial correlation
+
+The first method we use for inferring relations is partial correlation, assuming an instantaneous model.
+
+First of all we calculate the partial correlation between clusters of genes.
+```{r, message=FALSE, eval=FALSE}
+dati<-allsubjects
+dati<-as.matrix(dati)
+partial_matrix <- pcor(t(dati), method = 'pearson')$estimate
+rownames()
+```
+
+Let's visualize part of the matrix
+```{r}
+rownames(partial_matrix)<-1:4000
+colnames(partial_matrix)<-1:4000
+print(partial_matrix[1:6,1:6])
+```
+
+To calculate the null hypothesis we create a matrix permuting the columns of allsubjects independently for each row. We then calculate the partial correlation of this new matrix.
+Our original idea was to create more than one permutation matrix, but it was computationally too heavy.
+```{r,message=FALSE, eval=FALSE}
+set.seed(50)
+nulla<-dati
+N<-dim(nulla)[1]
+M<-dim(nulla)[2]
+for (i in 1:N){
+  nulla[i,]<-sample(dati[i,],M)
+}
+parnull<- pcor(t(nulla), method = 'pearson')$estimate
+```
+
+To decide the threshold our original idea was to estimate G0 and then look for the threshold that gave the desired FDR(ideally 0.05). Again, this was computationally too heavy, so we decided to be conservative assuming G0=G and we found the threshold empirically. We decided to set it to 0.8, this was the value that gave us the best balance between number of selected and FDR value.
+```{r}
+soglia<-0.80
+valori<-as.numeric(parnull)
+valori<-valori[!(valori==1)]
+vettorepar<-as.numeric(partial_matrix)
+vettorepar<-vettorepar[!(vettorepar==1)]
+totali<-length(valori)
+totpar<-length(vettorepar)
+selezionati<-length(vettorepar[abs(vettorepar)>=soglia])
+expFP<-(length(valori[abs(valori)>=soglia])/totali)*totpar
+FDR<-expFP/selezionati
+risultato<-c(selezionati,expFP,FDR)
+names(risultato)<-c('selected','expFP','FDR')
+print(risultato)
+```
+Still the FDR is fairly high, so we have to remember this when considering the obtained relatioins
+
+We find the relations inferred with this threshold taking also the sign of the relation.
+```{r, eval=FALSE}
+bool<-abs(partial_matrix)>soglia
+parrelazioni<-which(bool==TRUE,arr.ind = TRUE)
+parrelazioni<-as.data.frame(parrelazioni)
+parrelazioni<-parrelazioni[!(parrelazioni[,1]==parrelazioni[,2]),]
+segni<-c()
+M<-dim(parrelazioni)[1]
+for (i in 1:M){
+  segni<-append(segni,sign(partial_matrix[parrelazioni[i,1],parrelazioni[i,2]]))
+}
+for (j in (1 :length(segni))){
+  if (segni[j]==1){
+    segni[j]<-'+'
+  }
+  else {
+    segni[j]<-'-'
+  }
+}
+parrelazioni<-cbind(parrelazioni,segni)
+rownames(parrelazioni)<-1:M
+colnames(parrelazioni)<-c('cluster1','cluster2','sign')
+  
+```
+
+Let's visualize first relations
+```{r}
+print(parrelazioni[,1:5])
+```
+
+## Mutual information and ARACNe
+
+The second method we use is the one that considers mutual information as a similraty between variables. We will use the correction introduced in ARACNe to keep just the relation that are effectively present.
+
+First of all we calculate the mutual information for our data.
+
+```{r, eval=FALSE}
+N <- dim(allsubjects)[1]
+M <- dim(allsubjects)[2]
+discretized <- allsubjects
+discretized<-t(discretized)
+discretized<-discretize(discretized,nbins=7,disc='equalwidth')
+rownames(discretized)<-colnames(allsubjects)
+mutualm<-matrix(rep(0,N^2),nrow=N)
+rownames(mutualm)<-colnames(discretized)
+colnames(mutualm)<-colnames(discretized)
+mutualm<-mutinformation(discretized)
+mutue<-mutualm
+```
+
+Let's visualize part of the matrix.
+
+```{r}
+print(mutue[1:6,1:6])
+```
+To calculate the null hypothesis matrix we repeat the same procedure we did before but this time calculating the mutual information. As before, we could do just one permutation because of computational cost.
+```{r, eval=FALSE}
+set.seed(50)
+nulla<-allsubjects
+N<-dim(nulla)[1]
+M<-dim(nulla)[2]
+for (i in 1:N){
+  nulla[i,]<-sample(allsubjects[i,],M)
+}
+nulla<-t(nulla)
+nulla<-discretize(nulla,nbins=7,disc='equalwidth')
+rownames(nulla)<-colnames(allsubjects)
+nullmut<-matrix(rep(0,N^2),nrow=N)
+nullmut<-mutinformation(nulla)
+```
+
+We calculate the entropy of both cases, we will use it to scale the mutual information to eliminate the dependency on entropy.
+
+Firstly we do that for our original data.
+```{r}
+dati<-allsubjects
+N=dim(dati)[1]
+dati<-t(dati)
+dati<-as.data.frame(dati)
+dati<-infotheo::discretize(dati,nbins=7,disc='equalwidth')
+names_df <- colnames(dati)
+values_df <- rep(0, N)
+entropy_df <- data.frame(entropia = values_df, row.names = names_df)
+for (i in (1:N)){
+  row_curr <- dati[,i]
+  entropy_df[i,] <- entropy(row_curr)
+}
+print(head(entropy_df))
+```
+
+Then for the permuted data(using our function).
+```{r, eval=FALSE}
+nullentropy<-entropia(nulla)
+```
+
+We know scale each mutual information value dividing it by the max of the two entropies
+
+Firstly we do that for our original data
+```{r, eval=FALSE}
+scalmut<-mutue
+N<-dim(scalmut)[1]
+for (i in 1:N){
+  for (j in 1:N){
+    scalmut[i,j]<-scalmut[i,j]/max(entropy_df[i,],entropy_df[j,])
+  }
+}
+```
+Let's visualize part of the matrix
+```{r}
+print(scalmut[1:6,1:6])
+```
+Then for the permute data(using our function)
+```{r, eval=FALSE}
+scalnulmut<-scalamutua(nullmut,nullentropy)
+```
+
+As before, for the same reasons, we find the threshold empirically looking for a good balance between the number of selected genes and the FDR.
+```{r}
+soglia=0.63
+selezionati<-length(which(scalmut>=soglia&scalmut!=1))
+valori<-length(which(scalnulmut>=soglia&scalnulmut!=1))
+alfa<-valori/length(which(scalnulmut!=1))
+expFP<-alfa*length(which(scalmut!=1))
+FDR<-expFP/selezionati
+risultato<-c(selezionati,expFP,FDR)
+names(risultato)<-c('selected','expFP','FDR')
+print(risultato)
+```
+We select relations with mutual information greater than the threshold and visualize the first of them
+```{r}
+maggiori<-which(scalmut>soglia &scalmut!=1, arr.ind = TRUE)
+print(head(maggiori))
+```
+
+Now we check if there are relations to eliminate according to the information theory theorem used in ARACNe. This theorem states that if there exists a relation between variables X and Y, and a relation between variables X and Z, but not between Y and Z, then MI(Y,Z)<max{MI(X,Y),MI(X,Z)}.
+
+```{r}
+unici<-unique((maggiori[,1]))
+triplette<-c()
+for (i in unici){
+  opposite<-maggiori[maggiori[,1]==i,2]
+  for (j in opposite){
+    opposite2<-maggiori[maggiori[,1]==j,2]
+    for (k in opposite2){
+      if (k %in% opposite){
+        triplette<-append(triplette,c(i,j,k))
+        
+      }
+    }
+  }
+}
+print(triplette)
+```
+
+Triplette is empty, so there are no relations to eliminate.
+
+## Mutual information and entropy
+
+The third method we use is the one that searches for couples of genes x,y for which H(x)=M(x,y); in this case we can also infer the direction of the relation y->x .
+
+We already have the mutual information matrix saved in mutue and entropy in entropy_df from the previous analysis.
+
+```{r,eval=FALSE}
+
+relazioni<-matrix(c(0,0),nrow=1)
+for (i in (1:N)){
+  for (j in (1:N)){
+    if (i!=j){
+      if (entropy_df[i,]==mutue[i,j]){
+        relazioni<-rbind(relazioni,c((colnames(allsubjects))[i],
+                                      (rownames(allsubjects))[j]))
+      }
+    }
+  }
+}
+relazioni<-relazioni[-1,]
+colnames(relazioni)<-c('causa','effetto')
+```
+
+We visualize the first relations obtained.
+```{r}
+print(relazioni[,1:5])
+```
+```{r, message = FALSE}
+library(bnlearn)
+```
+
+## Bayesian Network
+
+The last method we used is the bayesian network. 
+
+The algorithm we used for optimizing the network is Restricted Maximization (rsmax2 in R). One of the problems of bayesian networks is the hugeness of the search space and most of the time is spent in searching for regulators of a variable that are improbable. This algorithm instead sppeds up the computation considering only a maximum number k of candidates for a variable at each iteration and maximazes the score according to these restrictions.
+
+```{r, eval = FALSE}
+allsubjects <- as.data.frame(allsubjects)
+rete_bayes <- rsmax2(allsubjects)
+archi <- rete_bayes$arcs
+```
+We visualize the first relations obtained
+```{r}
+print(archi[,1:5])
+```
+## Comparing Relations
+
+We want to see if there are common relations between the ones found with different methods. These may be key relations.
+
+The four sets of relations are:
+-relazioni -> the ones found with M(x,y)=H(x)
+-parrelazioni -> the ones found through partial correlation
+-archi -> the ones found with the bayesian network
+-relaracne -> the ones found with M(x,y) as similarity
+
+```{r}
+intersezione(relazioni,parrelazioni)
+```
+```{r}
+intersezione(relazioni,archi)
+```
+```{r}
+intersezione(relazioni,relaracne)
+```
+
+```{r}
+intersezione(parrelazioni,archi)
+```
+
+```{r}
+intersezione(parrelazioni,relaracne)
+```
+
+```{r}
+intersezione(relaracne,archi)
+```
+
+# Genetic Relations
+## Boolean network
+
+For the second part we focus on genetic data. The idea is to see if there are relations between different SNPs, in the sense that maybe some mutated SNP occur frequently when specific others are present or when others are missing.
+
+To do this we modelled each SNP as a boolean variable that has value 1 if it is mutated, 0 if it is the reference one.
+
+
+First of all we transform genetic data into boolean form.
+```{r}
+genetici <- read.delim('GeneticData.txt', row.names = 1)
+N <- dim(genetici)[1]
+M <- dim(genetici)[2]
+row_names <- rownames(genetici)
+col_names <- colnames(genetici)
+booleana_tab <- matrix(rep(0, N*M), nrow = N)
+rownames(booleana_tab) <- row_names
+colnames(booleana_tab) <- col_names
+for (i in (1:N)){
+  for (j in (1:M)){
+    if (genetici[i,j] == '---'){
+      booleana_tab[i,j] <- 0
+    }
+    else{
+      booleana_tab[i,j] <- 1
+    }
+  }
+}
+print(booleana_tab[1:6,1:6])
+```
+
+
+We eliminate rows of all 0's or of all 1's. We go from 3061 SNPs to 2973.
+```{r}
+N <- dim(booleana_tab)[1]
+M <- dim(booleana_tab)[2]
+lista_indici <- c()
+for (i in (1:N)){
+  somma <- sum(booleana_tab[i,])
+  if ((somma < 1) | (somma == M)){
+    lista_indici <- append(lista_indici, i)
+  }
+}
+booleana_tab <- booleana_tab[-lista_indici,]
+```
+
+
+Clustering equal rows. Height = 0 means no differences, so relative rows are equal; 'rimanenti' contains rows that are all different, so by cutting the clustering tree at rimanenti + 1 we obtain what we want
+
+```{r}
+dist_matrix <- dist(booleana_tab, method = 'euclidean')
+cluster_boo <- hclust(dist_matrix, method = 'average')
+altezze <- cluster_boo$height
+rimanenti <- length(altezze[altezze > 0])
+rimanenti <- rimanenti + 1
+clustering <- cutree(cluster_boo, rimanenti)
+gruppi_boo<-list()
+for(i in 1:rimanenti){
+  gruppi_boo<-append(gruppi_boo,list(names(clustering[clustering==i])))
+}
+```
+
+
+We create a table with all clusters; 714 is the number of obtained clusters, starting from a total of 2973 genes.
+```{r}
+tabella_boo<-matrix(rep(0,14994),nrow=714)
+for (i in 1:714){1
+  if (length(gruppi_boo[[i]])==1){
+    tabella_boo[i,]<-booleana_tab[gruppi_boo[[i]],]
+  }
+  else{
+    righe <- booleana_tab[gruppi_boo[[i]],]
+    riga <- righe[1,]
+    tabella_boo[i,]<-riga
+  }
+}
+colnames(tabella_boo)<-colnames(booleana_tab)
+rownames(tabella_boo)<-1:714
+
+```
+
+
+We use the reveal algorithm to look for possible relations between the clusters of SNP's. We tried to implement the algorithm with k=2(usign pairs of regulators), but it was computationally too heavy, so we just looked for relations of the type MI(x,y) = H(x).
+
+First of all we computed the entropy for all clusters 
+
+
+```{r}
+N=dim(tabella_boo)[1]
+tabella_boo<-t(tabella_boo)
+names_df <- colnames(tabella_boo)
+values_df <- rep(0, N)
+entropy_df <- data.frame(entropia = values_df, row.names = names_df)
+for (i in (1:N)){
+  row_curr <- tabella_boo[,i]
+  entropy_df[i,] <- entropy(row_curr)
+}
+print(head(entropy_df))
+```
+
+
+Then we computed the mutual information
+
+```{r}
+tabella_boo <- as.data.frame(tabella_boo)
+discreti_bool <- infotheo::discretize(tabella_boo, nbins = 2, disc = 'equalwidth')
+mutual_bool<-mutinformation(discreti_bool)
+print(mutual_bool[1:6, 1:6])
+```
+
+
+
+And finally we find the relations between clusters
+We visualize the first obtained
+
+```{r}
+relazioni_bool<-matrix(c(0,0),nrow=1)
+for (i in (1:N)){
+  for (j in (1:N)){
+    if (i!=j){
+      if (entropy_df[i,]==mutual_bool[i,j]){
+        relazioni_bool<-rbind(relazioni_bool,c((rownames(mutual_bool))[i],
+                                               (rownames(mutual_bool))[j]))
+      }
+    }
+  }
+}
+relazioni_bool<-relazioni_bool[-1,]
+colnames(relazioni_bool)<-c('causa','effetto')
+
+print(head(relazioni_bool))
+
+```
+
+# Genetic affecting transcriptomics
+
+Here in the third part we search if there are some SNP's that significantly affect the transcription of the corresponding gene
+
+## Data preparation
+
+First of all we associate to each SNP the corresponding gene
+```{r}
+dati<-read.delim('GeneticData.txt',row.names=1)
+annotazione<-read.delim('ensembl_annot.txt')
+cromosomi<-row.names(dati)
+simboli<-annotazione$Symbol
+simboli<-annotazione$Variation.ID
+associazione<-matrix(nrow=length(cromosomi))
+colnames(associazione)<-'Gene'
+geni<-c()
+for (i in cromosomi){
+  geni<-append(geni,annotazione$Symbol[grep(unlist(strsplit(i,'_'))[2],simboli)[1]])
+}
+associazione[,1]<-geni
+rownames(associazione)<-rownames(dati)
+associazione<-na.omit(associazione)
+```
+We visualize some of the associations
+```{r}
+print(associazione[25:35,])
+```
+Then we keep just the SNPs whose associated gene is present in the transcription data and we keep just the genes for which there is a SNP associated to them
+```{r}
+unici<-na.omit(unique(geni))
+raw<-read.delim('raw_trascr_count.txt',row.names=1)
+totali<-rownames(raw)
+comuni<-unici[unici%in%totali]
+dati<-cbind(dati,geni)
+comgenetic<-dati[dati$geni%in%comuni,]
+raw<-raw[rownames(raw)%in%comuni,]
+raw<-raw[,1:19]
+raw<-cbind(raw,rownames(raw))
+colnames(raw)[length(colnames(raw))]<-'geni'
+soggettigen<-colnames(comgenetic)
+soggettiraw<-colnames(raw)
+comgenetic<-comgenetic[,c(soggettigen%in%soggettiraw)]
+```
+
+We make the genetic data a boolean network (1 mutation, 0 no mutation)
+```{r}
+ultima<-comgenetic[,length(comgenetic[1,])]
+comgenetic<-booleana(comgenetic, file=FALSE)
+comgenetic[,length(comgenetic[1,])]<-ultima
+comgenetic<-as.data.frame(comgenetic)
+print(head(comgenetic),3)
+```
+## Correlation
+
+We now search for high correlation values between mutation presence or absence and corresponding gene trascription
+
+We create the correlation matrix after having ordered the subjects in the same way
+```{r,warning=FALSE}
+tabcor<-matrix(rep(0,length(rownames(comgenetic))),
+               nrow=length(rownames(comgenetic)))
+rownames(tabcor)<-rownames(comgenetic)
+comgenetic<-comgenetic[,order(colnames(comgenetic))]
+raw<-raw[,order(colnames(raw))]
+for (i in 1:length(rownames(comgenetic))){
+  gene<-comgenetic$geni[i]
+  tabcor[i]<-cor(as.numeric(comgenetic[i,2:length(comgenetic[1,])])
+                 ,as.numeric(raw[gene,2:length(raw[1,])]))
+}
+```
+We select the SNPs for which the correlation is higher than 0.7
+```{r}
+posizioni<-which(abs(tabcor)>=0.7)
+tenute<-tabcor[posizioni,]
+```
+
+And we plot the SNP values with the transcription values of the corresponding graph for these selected SNPs. We save the plot on the file 'snpimportanti.pdf'
+```{r,message=FALSE}
+pdf('snpimportanti.pdf')
+par(mfrow=c(2,2))
+for (j in 1:length(tenute)){
+  snp<-names(tenute)[j]
+  gene<-comgenetic[snp,]$geni
+  plot(1:19,comgenetic[snp,2:20], ylim=c(-4,4),xlab='subjects',ylab='expression')
+  vettore<-raw[gene,2:20]
+  vettore<-t(vettore)
+  vettore<-scale(vettore)
+  vettore<-t(vettore)
+  points(1:19,vettore,col='red')
+  legend(x='bottomright',c(snp,gene), fill=c('black','red'),bty='n')
+}
+dev.off()
+```
+We can look at one of this plots to see that it's informative 
+```{r}
+snp<-names(tenute)[1]
+gene<-comgenetic[snp,]$geni
+plot(1:19,comgenetic[snp,2:20], ylim=c(-4,4),xlab='subjects',ylab='expression')
+vettore<-raw[gene,2:20]
+vettore<-t(vettore)
+vettore<-scale(vettore)
+vettore<-t(vettore)
+points(1:19,vettore,col='red')
+legend(x='bottomright',c(snp,gene), fill=c('black','red'),bty='n')
+```
+The presence of the mutated SNP causes a great increase in the value of the transcription.
+
+ 
