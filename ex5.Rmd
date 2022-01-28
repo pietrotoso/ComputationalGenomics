@@ -586,7 +586,7 @@ ultima<-comgenetic[,length(comgenetic[1,])]
 comgenetic<-booleana(comgenetic, file=FALSE)
 comgenetic[,length(comgenetic[1,])]<-ultima
 comgenetic<-as.data.frame(comgenetic)
-print(head(comgenetic),3)
+print(head(comgenetic,3))
 ```
 ## Correlation
 
